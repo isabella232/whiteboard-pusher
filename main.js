@@ -5,9 +5,20 @@
   let colors = document.querySelectorAll(".color");
   let context = canvas.getContext("2d");
 
+  let pusher = new Pusher("2a81e2e82be1a9d76433", {
+    cluster: "us2"
+  });
+  let channel = pusher.subscribe("drawing-events");
+
+  console.log(pusher);
+  console.log(channel);
+
+  channel.bind("drawing", onDrawingEvent);
+
   let current = {
     color: "black"
   };
+
   let drawing = false;
 
   canvas.width = window.innerWidth;
@@ -27,7 +38,7 @@
     colors[i].addEventListener("click", updateColor, false);
   }
 
-  function drawLine(x0, x1, y0, y1, color) {
+  function drawLine(x0, x1, y0, y1, color, emit) {
     context.beginPath();
     context.moveTo(x0, y0);
     context.lineTo(x1, y1);
@@ -35,6 +46,21 @@
     context.lineWidth = 2;
     context.stroke();
     context.closePath();
+
+    if (!emit) {
+      return;
+    }
+
+    let w = canvas.width;
+    let h = canvas.height;
+
+    pushDrawData({
+      x0: x0 / w,
+      x1: x1 / w,
+      y0: y0 / h,
+      y1: y1 / h,
+      color
+    });
   }
 
   function onMouseDown(e) {
@@ -53,7 +79,8 @@
       e.clientX || e.touches[0].clientX,
       current.y,
       e.clientY || e.touches[0].clientY,
-      current.color
+      current.color,
+      true
     );
   }
 
@@ -66,7 +93,8 @@
       e.clientX || e.touches[0].clientX,
       current.y,
       e.clientY || e.touches[0].clientY,
-      current.color
+      current.color,
+      true
     );
     current.x = e.clientX || e.touches[0].clientX;
     current.y = e.clientY || e.touches[0].clientY;
@@ -85,11 +113,32 @@
   }
 
   function updateColor(e) {
+    console.log("changing color");
+    pushDrawData();
     current.color = e.target.className.split(" ")[1];
+  }
+
+  function onDrawingEvent({ x0, x1, y0, y1, color }) {
+    console.log("on drawing event ...");
+    let w = canvas.width;
+    let h = canvas.height;
+    drawLine(x0 * w, x1 * w, y0 * h, y1 * h, color);
   }
 
   function onResize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+  }
+
+  async function pushDrawData(data) {
+    const res = await fetch("/api/push-draw-data", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(data)
+    });
+    const text = await res.text();
+    console.log(text);
   }
 })();
